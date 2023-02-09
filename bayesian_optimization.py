@@ -2,6 +2,7 @@ import warnings
 import random
 
 import numpy as np
+import time
 from bayes_opt.constraint import ConstraintModel
 
 from scipy.stats import qmc
@@ -117,7 +118,9 @@ class BayesianOptimization(Observable):
                  verbose=2,
                  bounds_transformer=None,
                  allow_duplicate_points=False,
-                 nu=2.5):
+                 nu=2.5,
+                 test_sample=([], []),
+                 isSuit=False):
         self._random_state = ensure_rng(random_state)
         self._allow_duplicate_points = allow_duplicate_points
         self._queue = Queue()
@@ -129,6 +132,10 @@ class BayesianOptimization(Observable):
         self._res = []
         self._suit = []
         self._model_res = []
+        self._time = []
+        self._nu = nu
+        self._test_sample = test_sample
+        self._isSuit = isSuit
 
         # Internal GP regressor
         self._gp = GaussianProcessRegressor(
@@ -227,28 +234,49 @@ class BayesianOptimization(Observable):
         # we don't really need to see them here.
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            self._gp.fit(self._space.params, self._space.target)
+            if self._isSuit:
+                nu_mas = np.linspace(0, 3, 13)
+                max_suit = -1
+                for nu in nu_mas:
+                    temp_gp = GaussianProcessRegressor(
+                        kernel=Matern(nu),
+                        alpha=1e-6,
+                        normalize_y=True,
+                        n_restarts_optimizer=5,
+                        random_state=self._random_state,
+                    )
+                    temp_gp.fit(self._space.params, self._space.target)
+                    test_y = self._gp.predict(self._test_sample[0])
+                    y_ = self._test_sample[1]
+                    idx = np.triu_indices(len(self._test_sample[0]), 1)
+                    y_diffs = y_.reshape(-1, 1) - y_
+                    test_y_diffs = test_y.reshape(-1, 1) - test_y
+                    y_comparison = np.sign(y_diffs[idx])
+                    test_y_comparison = np.sign(test_y_diffs[idx])
+                    suit = np.mean(y_comparison == test_y_comparison)
+                    if suit > max_suit:
+                        max_suit = suit
+                        self._gp = temp_gp
+            else:
+                self._gp.fit(self._space.params, self._space.target)
 
-            n = len(self._pbounds.keys())
-            X_ = np.empty((1000, n))
-            for i in range(1000):
-                X_[i] = np.asarray([(self._pbounds[key][1] - self._pbounds[key][0]) * random.random() + self._pbounds[key][0] for key in self._pbounds.keys()])
-            y_ = self._function(1000, n, X_)
-            test_y = self._gp.predict(X_)
+                n = len(self._test_sample[0])
+                # X_ = np.empty((1000, n))
+                # for i in range(1000):
+                #     X_[i] = np.asarray([(self._pbounds[key][1] - self._pbounds[key][0]) * random.random() + self._pbounds[key][0] for key in self._pbounds.keys()])
+                # y_ = self._function(1000, n, X_)
 
-            suit = 0
-            n = len(y_)
-            for i in range(n - 1):
-                for j in range(i + 1, n):
-                    h = np.sign(y_[i] - y_[j])
-                    test_h = np.sign(test_y[i] - test_y[j])
+                test_y = self._gp.predict(self._test_sample[0])
+                y_ = self._test_sample[1]
+                idx = np.triu_indices(len(self._test_sample[0]), 1)
+                y_diffs = y_.reshape(-1, 1) - y_
+                test_y_diffs = test_y.reshape(-1, 1) - test_y
+                y_comparison = np.sign(y_diffs[idx])
+                test_y_comparison = np.sign(test_y_diffs[idx])
+                suit = np.mean(y_comparison == test_y_comparison)
 
-                    if h == test_h:
-                        suit += 1
-
-            self._suit.append(2 * suit / (n * (n - 1)))
-
-            self._score_res.append(self._gp.score(X_, y_))
+            self._suit.append(suit)
+            self._score_res.append(self._gp.score(self._test_sample[0], self._test_sample[1]))
             if self.is_constrained:
                 self.constraint.fit(self._space.params,
                                     self._space._constraint_values)
@@ -348,6 +376,7 @@ class BayesianOptimization(Observable):
                                kappa_decay_delay=kappa_decay_delay)
         iteration = 0
         while not self._queue.empty or iteration < n_iter:
+            t_start = time.time()
             try:
                 x_probe = next(self._queue)
                 write_ = False
@@ -364,6 +393,7 @@ class BayesianOptimization(Observable):
                 # the init_points points (only for the true iterations)
                 self.set_bounds(
                     self._bounds_transformer.transform(self._space))
+            self._time.append(time.time() - t_start)
 
         self.dispatch(Events.OPTIMIZATION_END)
 
