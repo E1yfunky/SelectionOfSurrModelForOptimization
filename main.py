@@ -102,7 +102,7 @@ def black_box_func(**X):
 	return -y
 
 
-def bayes_optim(d, nu_mas, init_points, n_iter, x_range, n, test_sample,  isSuit):
+def bayes_optim(d, nu_mas, init_points, n_iter, x_range, n, test_sample, isSuit, isScore):
 	result_data = []
 	df_dct = {'f_name': ['Rosenbrock'] * n_iter * len(nu_mas) * n,
 			  'dimension': [d] * n_iter * n * len(nu_mas),
@@ -115,12 +115,12 @@ def bayes_optim(d, nu_mas, init_points, n_iter, x_range, n, test_sample,  isSuit
 			  'score': [],
 			  'suitability': [],
 			  'seed': [],
-			  'isSuit': [str(isSuit)] * n_iter * n * len(nu_mas),
 			  'time': []}
 	for nu in nu_mas:
 		for i in range(n):
 			seed = i
-			df_dct['nu'].extend([nu] * n_iter)
+			if not isSuit:
+				df_dct['nu'].extend([nu] * n_iter)
 			optimizer = BayesianOptimization(f=black_box_func,
 											 pbounds={f"x[{_}]": x_range for _ in range(d)},
 											 test_f=get_rosenbrock_from_data,
@@ -128,9 +128,12 @@ def bayes_optim(d, nu_mas, init_points, n_iter, x_range, n, test_sample,  isSuit
 											 random_state=seed,
 											 nu=nu,
 											 test_sample=(test_sample.x, test_sample.f),
-											 isSuit=isSuit)
+											 isSuit=isSuit,
+											 isScore=isScore)
 
 			optimizer.maximize(init_points=init_points, n_iter=n_iter)
+			if isSuit:
+				df_dct['nu'].extend(optimizer._bst_nu)
 			df_dct['X'].extend(optimizer.test_x)
 			df_dct['target'].extend(optimizer._res)
 			df_dct['score'].extend(optimizer._score_res)
@@ -153,19 +156,19 @@ def main():
 	seed = 0
 	func = "Rosenbrock"
 
-	x_range = [-1, 2]
+	x_range = [-2, 2]
 	min_nu = 0
 	max_nu = 3
 	otn = 3
 	# nu_mas = np.linspace(min_nu, max_nu, 13)
-	nu_mas = [1.5]
+	nu_mas = [2.5]
 	d_dct = {2: 12} #, 4: 80, 8: 180
 
 	for d, points in d_dct.items():
 		n_inter = otn * points
 		problem = mopt.problems.f1.rosenbrock.Problem(d)
 		test_sample = mopt.problems.Sample(problem, doe="rnd", size=1000, seed=seed, tag=f"seed={seed}", verbose=True)
-		X, y_s, temp_df_dct = bayes_optim(d, nu_mas, points, n_inter, x_range, 20, test_sample, False)
+		X, y_s, temp_df_dct = bayes_optim(d, nu_mas, points, n_inter, x_range, 20, test_sample, False, False)
 		black_box_func.cache_clear()
 		df_marks = pd.DataFrame(temp_df_dct)
 
@@ -175,6 +178,30 @@ def main():
 		print('DataFrame is written successfully to Excel File.')
 
 		df_marks.to_csv(f'{func}_{d}d_test_data.csv', header=True, sep=';')
+		print('DataFrame is written successfully to csv.')
+
+		X, y_s, temp_df_dct = bayes_optim(d, nu_mas, points, n_inter, x_range, 20, test_sample, True, False)
+		black_box_func.cache_clear()
+		df_marks = pd.DataFrame(temp_df_dct)
+
+		writer = pd.ExcelWriter(f'{func}_{d}d_test_data_s.xlsx')
+		df_marks.to_excel(writer)
+		writer.save()
+		print('DataFrame is written successfully to Excel File.')
+
+		df_marks.to_csv(f'{func}_{d}d_test_data_s.csv', header=True, sep=';')
+		print('DataFrame is written successfully to csv.')
+
+		X, y_s, temp_df_dct = bayes_optim(d, nu_mas, points, n_inter, x_range, 20, test_sample, False, True)
+		black_box_func.cache_clear()
+		df_marks = pd.DataFrame(temp_df_dct)
+
+		writer = pd.ExcelWriter(f'{func}_{d}d_test_data_sc.xlsx')
+		df_marks.to_excel(writer)
+		writer.save()
+		print('DataFrame is written successfully to Excel File.')
+
+		df_marks.to_csv(f'{func}_{d}d_test_data_sc.csv', header=True, sep=';')
 		print('DataFrame is written successfully to csv.')
 
 

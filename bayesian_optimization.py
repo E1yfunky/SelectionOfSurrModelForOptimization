@@ -120,7 +120,8 @@ class BayesianOptimization(Observable):
                  allow_duplicate_points=False,
                  nu=2.5,
                  test_sample=([], []),
-                 isSuit=False):
+                 isSuit=False,
+                 isScore=False):
         self._random_state = ensure_rng(random_state)
         self._allow_duplicate_points = allow_duplicate_points
         self._queue = Queue()
@@ -136,6 +137,9 @@ class BayesianOptimization(Observable):
         self._nu = nu
         self._test_sample = test_sample
         self._isSuit = isSuit
+        self._isScore = isScore
+        if isSuit or isScore:
+            self._bst_nu = []
 
         # Internal GP regressor
         self._gp = GaussianProcessRegressor(
@@ -202,6 +206,68 @@ class BayesianOptimization(Observable):
         self._space.register(params, target)
         self.dispatch(Events.OPTIMIZATION_STEP)
 
+    def calculate_suit(self, gp_model):
+        test_y = gp_model.predict(self._test_sample[0])
+        y_ = np.array([-temp_y[0] for temp_y in self._test_sample[1]])
+        idx = np.triu_indices(len(self._test_sample[0]), 1)
+        y_diffs = y_.reshape(-1, 1) - y_
+        test_y_diffs = test_y.reshape(-1, 1) - test_y
+        y_comparison = np.sign(y_diffs[idx])
+        test_y_comparison = np.sign(test_y_diffs[idx])
+        return np.mean(y_comparison == test_y_comparison)
+
+    def find_bst_suit(self):
+        nu_mas = [0, 1.25, 1.5, 2.25, 2.5, 3]
+        max_suit = -1
+        max_score = -10
+        temp_bst_nu = self._nu
+        for nu_ in nu_mas:
+            temp_gp = GaussianProcessRegressor(
+                kernel=Matern(nu_),
+                alpha=1e-6,
+                normalize_y=True,
+                n_restarts_optimizer=5,
+                random_state=self._random_state,
+                )
+            temp_gp.fit(self._space.params, self._space.target)
+            suit = self.calculate_suit(temp_gp)
+            print(suit)
+            if suit >= max_suit:
+                score_ = temp_gp.score(self._test_sample[0], -self._test_sample[1])
+                print(score_)
+                if (score_ >= max_score) or (suit != max_suit):
+                    max_score = score_
+                    temp_bst_nu = nu_
+                    max_suit = suit
+                    self._gp = temp_gp
+        return max_suit, max_score, temp_bst_nu
+
+    def find_bst_score(self):
+        nu_mas = [0, 1.25, 1.5, 2.25, 2.5, 3]
+        max_suit = -1
+        max_score = -10
+        temp_bst_nu = self._nu
+        for nu_ in nu_mas:
+            temp_gp = GaussianProcessRegressor(
+                kernel=Matern(nu_),
+                alpha=1e-6,
+                normalize_y=True,
+                n_restarts_optimizer=5,
+                random_state=self._random_state,
+                )
+            temp_gp.fit(self._space.params, self._space.target)
+            score_ = temp_gp.score(self._test_sample[0], -self._test_sample[1])
+            print(score_)
+            if score_ >= max_score:
+                suit = self.calculate_suit(temp_gp)
+                print(suit)
+                if (suit >= max_suit) or (score_ != max_score):
+                    max_score = score_
+                    temp_bst_nu = nu_
+                    max_suit = suit
+                    self._gp = temp_gp
+        return max_score, max_suit, temp_bst_nu
+
     def probe(self, params, lazy=True, writing=False):
         """
         Evaluates the function on the given points. Useful to guide the optimizer.
@@ -235,48 +301,18 @@ class BayesianOptimization(Observable):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             if self._isSuit:
-                nu_mas = np.linspace(0, 3, 13)
-                max_suit = -1
-                for nu in nu_mas:
-                    temp_gp = GaussianProcessRegressor(
-                        kernel=Matern(nu),
-                        alpha=1e-6,
-                        normalize_y=True,
-                        n_restarts_optimizer=5,
-                        random_state=self._random_state,
-                    )
-                    temp_gp.fit(self._space.params, self._space.target)
-                    test_y = self._gp.predict(self._test_sample[0])
-                    y_ = self._test_sample[1]
-                    idx = np.triu_indices(len(self._test_sample[0]), 1)
-                    y_diffs = y_.reshape(-1, 1) - y_
-                    test_y_diffs = test_y.reshape(-1, 1) - test_y
-                    y_comparison = np.sign(y_diffs[idx])
-                    test_y_comparison = np.sign(test_y_diffs[idx])
-                    suit = np.mean(y_comparison == test_y_comparison)
-                    if suit > max_suit:
-                        max_suit = suit
-                        self._gp = temp_gp
+                max_suit, max_score, temp_bst_nu = self.find_bst_suit()
+                self._bst_nu.append(temp_bst_nu)
+            elif self._isScore:
+                max_score, max_suit, temp_bst_nu = self.find_bst_score()
+                self._bst_nu.append(temp_bst_nu)
             else:
                 self._gp.fit(self._space.params, self._space.target)
+                max_suit = self.calculate_suit(self._gp)
+                max_score = self._gp.score(self._test_sample[0], -self._test_sample[1])
 
-                n = len(self._test_sample[0])
-                # X_ = np.empty((1000, n))
-                # for i in range(1000):
-                #     X_[i] = np.asarray([(self._pbounds[key][1] - self._pbounds[key][0]) * random.random() + self._pbounds[key][0] for key in self._pbounds.keys()])
-                # y_ = self._function(1000, n, X_)
-
-                test_y = self._gp.predict(self._test_sample[0])
-                y_ = self._test_sample[1]
-                idx = np.triu_indices(len(self._test_sample[0]), 1)
-                y_diffs = y_.reshape(-1, 1) - y_
-                test_y_diffs = test_y.reshape(-1, 1) - test_y
-                y_comparison = np.sign(y_diffs[idx])
-                test_y_comparison = np.sign(test_y_diffs[idx])
-                suit = np.mean(y_comparison == test_y_comparison)
-
-            self._suit.append(suit)
-            self._score_res.append(self._gp.score(self._test_sample[0], self._test_sample[1]))
+            self._suit.append(max_suit)
+            self._score_res.append(max_score)
             if self.is_constrained:
                 self.constraint.fit(self._space.params,
                                     self._space._constraint_values)
@@ -376,16 +412,17 @@ class BayesianOptimization(Observable):
                                kappa_decay_delay=kappa_decay_delay)
         iteration = 0
         while not self._queue.empty or iteration < n_iter:
-            t_start = time.time()
-            try:
+            if not self._queue.empty:
                 x_probe = next(self._queue)
                 write_ = False
-            except StopIteration:
+            else:
+                t_start = time.time()
                 util.update_params()
                 x_probe = self.suggest(util)
                 self.test_x.append(x_probe)
                 iteration += 1
                 write_ = True
+                self._time.append(time.time() - t_start)
             self.probe(x_probe, lazy=False, writing=write_)
 
             if self._bounds_transformer and iteration > 0:
@@ -393,7 +430,6 @@ class BayesianOptimization(Observable):
                 # the init_points points (only for the true iterations)
                 self.set_bounds(
                     self._bounds_transformer.transform(self._space))
-            self._time.append(time.time() - t_start)
 
         self.dispatch(Events.OPTIMIZATION_END)
 
