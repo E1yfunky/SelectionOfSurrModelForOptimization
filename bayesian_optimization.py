@@ -112,21 +112,25 @@ class BayesianOptimization(Observable):
     def __init__(self,
                  f,
                  pbounds,
-                 test_f,
                  constraint=None,
                  random_state=None,
                  verbose=2,
                  bounds_transformer=None,
                  allow_duplicate_points=False,
                  nu=2.5,
+                 init_sample=None,
                  test_sample=([], []),
                  isSuit=False,
                  isScore=False):
         self._random_state = ensure_rng(random_state)
+        self._seed = random_state
         self._allow_duplicate_points = allow_duplicate_points
         self._queue = Queue()
 
-        self._function = test_f
+        if init_sample is not None:
+            for init_point in init_sample:
+                self._queue.add(init_point)
+
         self._pbounds = pbounds
         self._score_res = []
         self.test_x = []
@@ -217,9 +221,8 @@ class BayesianOptimization(Observable):
         return np.mean(y_comparison == test_y_comparison)
 
     def find_bst_suit(self):
-        nu_mas = [0, 1.25, 1.5, 2.25, 2.5, 3]
-        max_suit = -1
-        max_score = -10
+        nu_mas = [0, 1.25, 1.5, 2.25, 2.5, 3, np.inf]
+        max_suit = -np.inf
         temp_bst_nu = self._nu
         for nu_ in nu_mas:
             temp_gp = GaussianProcessRegressor(
@@ -232,20 +235,22 @@ class BayesianOptimization(Observable):
             temp_gp.fit(self._space.params, self._space.target)
             suit = self.calculate_suit(temp_gp)
             print(suit)
-            if suit >= max_suit:
-                score_ = temp_gp.score(self._test_sample[0], -self._test_sample[1])
-                print(score_)
-                if (score_ >= max_score) or (suit != max_suit):
-                    max_score = score_
+            if suit == max_suit:
+                temp_score_ = temp_gp.score(self._test_sample[0], -self._test_sample[1])
+                score_ = self._gp.score(self._test_sample[0], -self._test_sample[1])
+                if temp_score_ > score_:
                     temp_bst_nu = nu_
                     max_suit = suit
                     self._gp = temp_gp
-        return max_suit, max_score, temp_bst_nu
+            elif suit > max_suit:
+                temp_bst_nu = nu_
+                max_suit = suit
+                self._gp = temp_gp
+        return max_suit, temp_bst_nu
 
     def find_bst_score(self):
-        nu_mas = [0, 1.25, 1.5, 2.25, 2.5, 3]
-        max_suit = -1
-        max_score = -10
+        nu_mas = [0, 1.25, 1.5, 2.25, 2.5, 3, np.inf]
+        max_score = -np.inf
         temp_bst_nu = self._nu
         for nu_ in nu_mas:
             temp_gp = GaussianProcessRegressor(
@@ -258,15 +263,11 @@ class BayesianOptimization(Observable):
             temp_gp.fit(self._space.params, self._space.target)
             score_ = temp_gp.score(self._test_sample[0], -self._test_sample[1])
             print(score_)
-            if score_ >= max_score:
-                suit = self.calculate_suit(temp_gp)
-                print(suit)
-                if (suit >= max_suit) or (score_ != max_score):
-                    max_score = score_
-                    temp_bst_nu = nu_
-                    max_suit = suit
-                    self._gp = temp_gp
-        return max_score, max_suit, temp_bst_nu
+            if score_ > max_score:
+                max_score = score_
+                temp_bst_nu = nu_
+                self._gp = temp_gp
+        return max_score, temp_bst_nu
 
     def probe(self, params, lazy=True, writing=False):
         """
@@ -300,14 +301,16 @@ class BayesianOptimization(Observable):
         # we don't really need to see them here.
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
+            self._gp.fit(self._space.params, self._space.target)
             if self._isSuit:
-                max_suit, max_score, temp_bst_nu = self.find_bst_suit()
+                max_suit, temp_bst_nu = self.find_bst_suit()
+                max_score = self._gp.score(self._test_sample[0], -self._test_sample[1])
                 self._bst_nu.append(temp_bst_nu)
             elif self._isScore:
-                max_score, max_suit, temp_bst_nu = self.find_bst_score()
+                max_score, temp_bst_nu = self.find_bst_score()
+                max_suit = self.calculate_suit(self._gp)
                 self._bst_nu.append(temp_bst_nu)
             else:
-                self._gp.fit(self._space.params, self._space.target)
                 max_suit = self.calculate_suit(self._gp)
                 max_score = self._gp.score(self._test_sample[0], -self._test_sample[1])
 
@@ -402,7 +405,8 @@ class BayesianOptimization(Observable):
         """
         self._prime_subscriptions()
         self.dispatch(Events.OPTIMIZATION_START)
-        self.hyper_cube(init_points)
+        if self._queue.empty:
+            self.hyper_cube(init_points)
         self.set_gp_params(**gp_params)
 
         util = UtilityFunction(kind=acq,

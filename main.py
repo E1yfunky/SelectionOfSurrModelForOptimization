@@ -1,4 +1,5 @@
 import openpyxl
+import random
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -40,7 +41,6 @@ def make_3d_points_animation(optimizer, iters, x_range):
 
 	camera = Camera(fig)
 
-
 	test_data = optimizer.test_x
 	test_data = np.array([np.array([key for key in i], dtype=float) for i in test_data[:-iters]])
 	test_x = np.array([i[0] for i in test_data], dtype=float)
@@ -51,7 +51,8 @@ def make_3d_points_animation(optimizer, iters, x_range):
 	x_ros, y_ros = np.meshgrid(x_ros, y_ros)
 	z_ros = []
 	for j in range(len(x_ros)):
-		z_ros.append(list(get_rosenbrock_from_data(len(x_ros[j]), 2, [[x_ros[j][i], y_ros[j][i]] for i in range(len(x_ros[j]))])))
+		z_ros.append(list(
+			get_rosenbrock_from_data(len(x_ros[j]), 2, [[x_ros[j][i], y_ros[j][i]] for i in range(len(x_ros[j]))])))
 
 	for i in range(len(test_x)):
 		temp_x = test_x[:i + 1]
@@ -102,6 +103,16 @@ def black_box_func(**X):
 	return -y
 
 
+@lru_cache(maxsize=None)
+def him_fun(**X):
+	X = np.array([X[key] for key in sorted(X)], dtype=float)
+
+	y = 0
+	for i in range(len(X) - 1):
+		y += (X[i] ** 2 + X[i + 1] - 11) ** 2 + (X[i] + X[i + 1] ** 2 - 7) ** 2
+	return -y
+
+
 def bayes_optim(d, nu_mas, init_points, n_iter, x_range, n, test_sample, isSuit, isScore):
 	result_data = []
 	df_dct = {'f_name': ['Rosenbrock'] * n_iter * len(nu_mas) * n,
@@ -119,27 +130,30 @@ def bayes_optim(d, nu_mas, init_points, n_iter, x_range, n, test_sample, isSuit,
 	for nu in nu_mas:
 		for i in range(n):
 			seed = i
-			if not isSuit:
+			if not isSuit and not isScore:
 				df_dct['nu'].extend([nu] * n_iter)
+
+			init_sample = mopt.problems.Sample(problem, doe="lhs", size=init_points, seed=seed, tag=f"seed={seed}",
+											   verbose=True)
 			optimizer = BayesianOptimization(f=black_box_func,
 											 pbounds={f"x[{_}]": x_range for _ in range(d)},
-											 test_f=get_rosenbrock_from_data,
 											 verbose=2,
 											 random_state=seed,
 											 nu=nu,
+											 init_sample=init_sample.x,
 											 test_sample=(test_sample.x, test_sample.f),
 											 isSuit=isSuit,
 											 isScore=isScore)
 
 			optimizer.maximize(init_points=init_points, n_iter=n_iter)
-			if isSuit:
+			if isSuit or isScore:
 				df_dct['nu'].extend(optimizer._bst_nu)
 			df_dct['X'].extend(optimizer.test_x)
 			df_dct['target'].extend(optimizer._res)
 			df_dct['score'].extend(optimizer._score_res)
 			df_dct['suitability'].extend(optimizer._suit)
 			df_dct['time'].extend(optimizer._time)
-			df_dct['seed'].extend([seed]*n_iter)
+			df_dct['seed'].extend([seed] * n_iter)
 			if len(result_data) > 0 and len(result_data[-1]) % n > 0:
 				result_data[-1].append(-optimizer.max["target"])
 			else:
@@ -152,8 +166,10 @@ def bayes_optim(d, nu_mas, init_points, n_iter, x_range, n, test_sample, isSuit,
 
 def main():
 	black_box_func.cache_clear()
+	global problem
 
-	seed = 0
+	seed = 2
+	random.seed(seed)
 	func = "Rosenbrock"
 
 	x_range = [-2, 2]
@@ -162,7 +178,7 @@ def main():
 	otn = 3
 	# nu_mas = np.linspace(min_nu, max_nu, 13)
 	nu_mas = [2.5]
-	d_dct = {2: 12} #, 4: 80, 8: 180
+	d_dct = {2: 12}  # , 4: 80, 8: 180
 
 	for d, points in d_dct.items():
 		n_inter = otn * points
