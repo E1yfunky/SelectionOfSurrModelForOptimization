@@ -207,11 +207,6 @@ def main():
 		black_box_func.cache_clear()
 		df_marks = pd.DataFrame(temp_df_dct)
 
-		writer = pd.ExcelWriter(f'{func}_{d}d_test_data.xlsx')
-		df_marks.to_excel(writer)
-		writer.save()
-		print('DataFrame is written successfully to Excel File.')
-
 		df_marks.to_csv(f'{func}_{d}d_test_data.csv', header=True, sep=';')
 		print('DataFrame is written successfully to csv.')
 
@@ -219,22 +214,12 @@ def main():
 		black_box_func.cache_clear()
 		df_marks = pd.DataFrame(temp_df_dct)
 
-		writer = pd.ExcelWriter(f'{func}_{d}d_test_data_s.xlsx')
-		df_marks.to_excel(writer)
-		writer.save()
-		print('DataFrame is written successfully to Excel File.')
-
 		df_marks.to_csv(f'{func}_{d}d_test_data_s.csv', header=True, sep=';')
 		print('DataFrame is written successfully to csv.')
 
 		X, y_s, temp_df_dct = bayes_optim(d, nu_mas, points, n_inter, x_range, 20, test_sample, False, True)
 		black_box_func.cache_clear()
 		df_marks = pd.DataFrame(temp_df_dct)
-
-		writer = pd.ExcelWriter(f'{func}_{d}d_test_data_sc.xlsx')
-		df_marks.to_excel(writer)
-		writer.save()
-		print('DataFrame is written successfully to Excel File.')
 
 		df_marks.to_csv(f'{func}_{d}d_test_data_sc.csv', header=True, sep=';')
 		print('DataFrame is written successfully to csv.')
