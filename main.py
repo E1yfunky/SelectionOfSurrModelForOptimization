@@ -154,7 +154,7 @@ def bayes_optim(d, nu_mas, init_points, n_iter, x_range, n, test_sample, isSuit,
 
 			init_sample = mopt.problems.Sample(problem, doe="lhs", size=init_points, seed=seed, tag=f"seed={seed}",
 											   verbose=True)
-			optimizer = BayesianOptimization(f=ackley_fun,
+			optimizer = Bayesian_Optimization(f=ackley_fun,
 											 pbounds={f"x[{_}]": x_range for _ in range(d)},
 											 verbose=2,
 											 random_state=seed,
