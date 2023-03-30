@@ -5,9 +5,32 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 from celluloid import Camera
-from mopt import mopt
+import mopt
 from functools import lru_cache
 from bayesian_optimization import BayesianOptimization
+
+
+def get_one_rosenbrock(X, n):
+	temp_y = 0
+	for i in range(0, n - 1):
+		temp_y += (1 - X[i]) ** 2 + 100 * ((X[i + 1] - X[i] ** 2) ** 2)
+
+	return temp_y
+
+
+def get_rosenbrock_from_data(m, n, X):
+	"""
+	Возвращает m результатов функции Розенброка для заданных точек X размерностей n
+	:param m: число точек (целое)
+	:param n: размерность вектора параметров (целое)
+	:param X: двумерный массив точек
+	:return: одномерный массив значений функции
+	"""
+	y = np.empty((m,))
+	for j in range(0, m):
+		y[j] = (np.array([- get_one_rosenbrock(X[j], n)]))
+
+	return y
 
 
 def make_points_animation(optimizer, iters, x_range):
@@ -70,29 +93,6 @@ def make_3d_points_animation(optimizer, iters, x_range):
 	animation.save('my_animation_centered.gif')
 
 
-def get_one_rosenbrock(X, n):
-	temp_y = 0
-	for i in range(0, n - 1):
-		temp_y += (1 - X[i]) ** 2 + 100 * ((X[i + 1] - X[i] ** 2) ** 2)
-
-	return temp_y
-
-
-def get_rosenbrock_from_data(m, n, X):
-	"""
-	Возвращает m результатов функции Розенброка для заданных точек X размерностей n
-	:param m: число точек (целое)
-	:param n: размерность вектора параметров (целое)
-	:param X: двумерный массив точек
-	:return: одномерный массив значений функции
-	"""
-	y = np.empty((m,))
-	for j in range(0, m):
-		y[j] = (np.array([- get_one_rosenbrock(X[j], n)]))
-
-	return y
-
-
 @lru_cache(maxsize=None)
 def black_box_func(**X):
 	X = np.array([X[key] for key in sorted(X)], dtype=float)
@@ -103,7 +103,6 @@ def black_box_func(**X):
 	return -y
 
 
-@lru_cache(maxsize=None)
 def him_fun(**X):
 	X = np.array([X[key] for key in sorted(X)], dtype=float)
 
@@ -113,9 +112,29 @@ def him_fun(**X):
 	return -y
 
 
+def levy_fun(**X):
+	x = np.array([X[key] for key in sorted(X)], dtype=float)
+
+	x = [1 + (xi - 1) / 4 for xi in x]
+	y = np.sin(np.pi * x[0]) ** 2 + (x[-1] - 1) ** 2 * (1 + np.sin(2 * np.pi * x[-1]) ** 2) + \
+		   np.sum([(x[i] - 1) ** 2 * (1 + 10 * np.sin(np.pi * x[i] + 1) ** 2) for i in range(len(x) - 1)])
+	return -y
+
+
+def ackley_fun(**X):
+	x = np.array([X[key] for key in sorted(X)], dtype=float)
+
+	firstSum = 0.0
+	secondSum = 0.0
+	for xi in x:
+		firstSum += xi ** 2
+		secondSum += np.cos(2.0 * np.pi * xi)
+	return 20.0 * np.exp(-0.2 * np.sqrt(firstSum / len(x))) + np.exp(secondSum / len(x)) - 20 - np.e
+
+
 def bayes_optim(d, nu_mas, init_points, n_iter, x_range, n, test_sample, isSuit, isScore):
 	result_data = []
-	df_dct = {'f_name': ['Rosenbrock'] * n_iter * len(nu_mas) * n,
+	df_dct = {'f_name': ['ackley'] * n_iter * len(nu_mas) * n,
 			  'dimension': [d] * n_iter * n * len(nu_mas),
 			  'nu': [],
 			  'iteration': [i for i in range(n_iter)] * len(nu_mas) * n,
@@ -135,7 +154,7 @@ def bayes_optim(d, nu_mas, init_points, n_iter, x_range, n, test_sample, isSuit,
 
 			init_sample = mopt.problems.Sample(problem, doe="lhs", size=init_points, seed=seed, tag=f"seed={seed}",
 											   verbose=True)
-			optimizer = BayesianOptimization(f=black_box_func,
+			optimizer = BayesianOptimization(f=ackley_fun,
 											 pbounds={f"x[{_}]": x_range for _ in range(d)},
 											 verbose=2,
 											 random_state=seed,
@@ -159,7 +178,7 @@ def bayes_optim(d, nu_mas, init_points, n_iter, x_range, n, test_sample, isSuit,
 			else:
 				result_data.append([-optimizer.max["target"]])
 			print(black_box_func.cache_info())
-			print("Best result: {}; f(x) = {}.".format(optimizer.max["params"], optimizer.max["target"]))
+			print("{}/{} Best result: {}; f(x) = {}.".format(i, n, optimizer.max["params"], optimizer.max["target"]))
 
 	return nu_mas, np.array(result_data), df_dct
 
@@ -170,19 +189,19 @@ def main():
 
 	seed = 2
 	random.seed(seed)
-	func = "Rosenbrock"
+	func = "ackley"
 
-	x_range = [-2, 2]
+	x_range = [-3, 3]
 	min_nu = 0
 	max_nu = 3
 	otn = 3
 	# nu_mas = np.linspace(min_nu, max_nu, 13)
 	nu_mas = [2.5]
-	d_dct = {2: 12}  # , 4: 80, 8: 180
+	d_dct = {2: 12, 4: 80, 8: 160}  # , 4: 80, 8: 160
 
 	for d, points in d_dct.items():
 		n_inter = otn * points
-		problem = mopt.problems.f1.rosenbrock.Problem(d)
+		problem = mopt.problems.f1.ackley.Problem(d)
 		test_sample = mopt.problems.Sample(problem, doe="rnd", size=1000, seed=seed, tag=f"seed={seed}", verbose=True)
 		X, y_s, temp_df_dct = bayes_optim(d, nu_mas, points, n_inter, x_range, 20, test_sample, False, False)
 		black_box_func.cache_clear()

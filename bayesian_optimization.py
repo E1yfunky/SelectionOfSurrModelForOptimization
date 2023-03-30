@@ -4,6 +4,7 @@ import random
 import numpy as np
 import time
 from bayes_opt.constraint import ConstraintModel
+from bayes_opt.bayesian_optimization import Queue, BayesianOptimization
 
 from scipy.stats import qmc
 from bayes_opt.target_space import TargetSpace
@@ -15,58 +16,7 @@ from sklearn.gaussian_process.kernels import Matern
 from sklearn.gaussian_process import GaussianProcessRegressor
 
 
-class Queue:
-    def __init__(self):
-        self._queue = []
-
-    @property
-    def empty(self):
-        return len(self) == 0
-
-    def __len__(self):
-        return len(self._queue)
-
-    def __next__(self):
-        if self.empty:
-            raise StopIteration("Queue is empty, no more objects to retrieve.")
-        obj = self._queue[0]
-        self._queue = self._queue[1:]
-        return obj
-
-    def add(self, obj):
-        """Add object to end of queue."""
-        self._queue.append(obj)
-
-
-class Observable(object):
-    """
-
-    Inspired/Taken from
-        https://www.protechtraining.com/blog/post/879#simple-observer
-    """
-
-    def __init__(self, events):
-        # maps event names to subscribers
-        # str -> dict
-        self._events = {event: dict() for event in events}
-
-    def get_subscribers(self, event):
-        return self._events[event]
-
-    def subscribe(self, event, subscriber, callback=None):
-        if callback is None:
-            callback = getattr(subscriber, 'update')
-        self.get_subscribers(event)[subscriber] = callback
-
-    def unsubscribe(self, event, subscriber):
-        del self.get_subscribers(event)[subscriber]
-
-    def dispatch(self, event):
-        for _, callback in self.get_subscribers(event).items():
-            callback(event, self)
-
-
-class BayesianOptimization(Observable):
+class Bayesian_Optimization(BayesianOptimization):
     """
     This class takes the function to optimize as well as the parameters bounds
     in order to find which values for the parameters yield the maximum value
@@ -116,7 +66,7 @@ class BayesianOptimization(Observable):
                  random_state=None,
                  verbose=2,
                  bounds_transformer=None,
-                 allow_duplicate_points=False,
+                 allow_duplicate_points=True,
                  nu=2.5,
                  init_sample=None,
                  test_sample=([], []),
@@ -186,29 +136,6 @@ class BayesianOptimization(Observable):
                                 'DomainTransformer')
 
         super(BayesianOptimization, self).__init__(events=DEFAULT_EVENTS)
-
-    @property
-    def space(self):
-        return self._space
-
-    @property
-    def constraint(self):
-        if self.is_constrained:
-            return self._space.constraint
-        return None
-
-    @property
-    def max(self):
-        return self._space.max()
-
-    @property
-    def res(self):
-        return self._space.res()
-
-    def register(self, params, target):
-        """Expect observation with known target"""
-        self._space.register(params, target)
-        self.dispatch(Events.OPTIMIZATION_STEP)
 
     def calculate_suit(self, gp_model):
         test_y = gp_model.predict(self._test_sample[0])
@@ -436,18 +363,3 @@ class BayesianOptimization(Observable):
                     self._bounds_transformer.transform(self._space))
 
         self.dispatch(Events.OPTIMIZATION_END)
-
-    def set_bounds(self, new_bounds):
-        """
-        A method that allows changing the lower and upper searching bounds
-
-        Parameters
-        ----------
-        new_bounds : dict
-            A dictionary with the parameter name and its new bounds
-        """
-        self._space.set_bounds(new_bounds)
-
-    def set_gp_params(self, **params):
-        """Set parameters to the internal Gaussian Process Regressor"""
-        self._gp.set_params(**params)
