@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from celluloid import Camera
 import mopt
 from functools import lru_cache
-from bayesian_optimization import BayesianOptimization
+from bayesian_optimization import Bayesian_Optimization
 
 
 def get_one_rosenbrock(X, n):
