@@ -97,44 +97,12 @@ def make_3d_points_animation(optimizer, iters, x_range):
 def black_box_func(**X):
 	X = np.array([X[key] for key in sorted(X)], dtype=float)
 
-	y = 0
-	for i in range(len(X) - 1):
-		y += (1 - X[i]) ** 2 + 100 * ((X[i + 1] - X[i] ** 2) ** 2)
-	return -y
+	return -problem.define_objectives(X)[0]
 
 
-def him_fun(**X):
-	X = np.array([X[key] for key in sorted(X)], dtype=float)
-
-	y = 0
-	for i in range(len(X) - 1):
-		y += (X[i] ** 2 + X[i + 1] - 11) ** 2 + (X[i] + X[i + 1] ** 2 - 7) ** 2
-	return -y
-
-
-def levy_fun(**X):
-	x = np.array([X[key] for key in sorted(X)], dtype=float)
-
-	x = [1 + (xi - 1) / 4 for xi in x]
-	y = np.sin(np.pi * x[0]) ** 2 + (x[-1] - 1) ** 2 * (1 + np.sin(2 * np.pi * x[-1]) ** 2) + \
-		   np.sum([(x[i] - 1) ** 2 * (1 + 10 * np.sin(np.pi * x[i] + 1) ** 2) for i in range(len(x) - 1)])
-	return -y
-
-
-def ackley_fun(**X):
-	x = np.array([X[key] for key in sorted(X)], dtype=float)
-
-	firstSum = 0.0
-	secondSum = 0.0
-	for xi in x:
-		firstSum += xi ** 2
-		secondSum += np.cos(2.0 * np.pi * xi)
-	return 20.0 * np.exp(-0.2 * np.sqrt(firstSum / len(x))) + np.exp(secondSum / len(x)) - 20 - np.e
-
-
-def bayes_optim(d, nu_mas, init_points, n_iter, x_range, n, test_sample, isSuit, isScore):
+def bayes_optim(d, nu_mas, init_points, n_iter, x_range, n, alfa, isMode):
 	result_data = []
-	df_dct = {'f_name': ['ackley'] * n_iter * len(nu_mas) * n,
+	df_dct = {
 			  'dimension': [d] * n_iter * n * len(nu_mas),
 			  'nu': [],
 			  'iteration': [i for i in range(n_iter)] * len(nu_mas) * n,
@@ -144,32 +112,33 @@ def bayes_optim(d, nu_mas, init_points, n_iter, x_range, n, test_sample, isSuit,
 			  'target': [],
 			  'score': [],
 			  'suitability': [],
+			  'metric': [],
 			  'seed': [],
 			  'time': []}
 	for nu in nu_mas:
 		for i in range(n):
 			seed = i
-			if not isSuit and not isScore:
+			if not isMode:
 				df_dct['nu'].extend([nu] * n_iter)
 
 			init_sample = mopt.problems.Sample(problem, doe="lhs", size=init_points, seed=seed, tag=f"seed={seed}",
 											   verbose=True)
-			optimizer = Bayesian_Optimization(f=ackley_fun,
+			optimizer = Bayesian_Optimization(f=black_box_func,
 											 pbounds={f"x[{_}]": x_range for _ in range(d)},
 											 verbose=2,
 											 random_state=seed,
 											 nu=nu,
 											 init_sample=init_sample.x,
-											 test_sample=(test_sample.x, test_sample.f),
-											 isSuit=isSuit,
-											 isScore=isScore)
+											 alfa=alfa,
+											 isMode=isMode)
 
 			optimizer.maximize(init_points=init_points, n_iter=n_iter)
-			if isSuit or isScore:
+			if isMode:
 				df_dct['nu'].extend(optimizer._bst_nu)
 			df_dct['X'].extend(optimizer.test_x)
 			df_dct['target'].extend(optimizer._res)
 			df_dct['score'].extend(optimizer._score_res)
+			df_dct['metric'].extend(optimizer._metric)
 			df_dct['suitability'].extend(optimizer._suit)
 			df_dct['time'].extend(optimizer._time)
 			df_dct['seed'].extend([seed] * n_iter)
@@ -178,7 +147,7 @@ def bayes_optim(d, nu_mas, init_points, n_iter, x_range, n, test_sample, isSuit,
 			else:
 				result_data.append([-optimizer.max["target"]])
 			print(black_box_func.cache_info())
-			print("{}/{} Best result: {}; f(x) = {}.".format(i, n, optimizer.max["params"], optimizer.max["target"]))
+			print("{}/{} Best result: {}; f(x) = {}.".format(i + 1, n, optimizer.max["params"], optimizer.max["target"]))
 
 	return nu_mas, np.array(result_data), df_dct
 
@@ -197,31 +166,23 @@ def main():
 	otn = 3
 	# nu_mas = np.linspace(min_nu, max_nu, 13)
 	nu_mas = [2.5]
-	d_dct = {2: 12, 4: 80, 8: 160}  # , 4: 80, 8: 160
+	d_dct = {2: 12, 4: 80, 8: 160}  #2: 12, 4: 80, 8: 160
 
 	for d, points in d_dct.items():
 		n_inter = otn * points
 		problem = mopt.problems.f1.ackley.Problem(d)
-		test_sample = mopt.problems.Sample(problem, doe="rnd", size=1000, seed=seed, tag=f"seed={seed}", verbose=True)
-		X, y_s, temp_df_dct = bayes_optim(d, nu_mas, points, n_inter, x_range, 20, test_sample, False, False)
+		X, y_s, temp_df_dct = bayes_optim(d, nu_mas, points, n_inter, x_range, 20, 0.5, False)
 		black_box_func.cache_clear()
 		df_marks = pd.DataFrame(temp_df_dct)
 
 		df_marks.to_csv(f'{func}_{d}d_test_data.csv', header=True, sep=';')
 		print('DataFrame is written successfully to csv.')
 
-		X, y_s, temp_df_dct = bayes_optim(d, nu_mas, points, n_inter, x_range, 20, test_sample, True, False)
+		X, y_s, temp_df_dct = bayes_optim(d, nu_mas, points, n_inter, x_range, 20, 0.5, True)
 		black_box_func.cache_clear()
 		df_marks = pd.DataFrame(temp_df_dct)
 
 		df_marks.to_csv(f'{func}_{d}d_test_data_s.csv', header=True, sep=';')
-		print('DataFrame is written successfully to csv.')
-
-		X, y_s, temp_df_dct = bayes_optim(d, nu_mas, points, n_inter, x_range, 20, test_sample, False, True)
-		black_box_func.cache_clear()
-		df_marks = pd.DataFrame(temp_df_dct)
-
-		df_marks.to_csv(f'{func}_{d}d_test_data_sc.csv', header=True, sep=';')
 		print('DataFrame is written successfully to csv.')
 
 
