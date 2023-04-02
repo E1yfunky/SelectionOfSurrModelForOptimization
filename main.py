@@ -158,7 +158,7 @@ def main():
 
 	seed = 2
 	random.seed(seed)
-	func = "ackley"
+	functions = {'himmelblau': mopt.problems.f1.himmelblau, "ackley": mopt.problems.f1.ackley, 'levy': mopt.problems.f1.levy3}
 
 	x_range = [-3, 3]
 	min_nu = 0
@@ -169,21 +169,22 @@ def main():
 	d_dct = {2: 12, 4: 80, 8: 160}  #2: 12, 4: 80, 8: 160
 
 	for d, points in d_dct.items():
-		n_inter = otn * points
-		problem = mopt.problems.f1.ackley.Problem(d)
-		X, y_s, temp_df_dct = bayes_optim(d, nu_mas, points, n_inter, x_range, 20, 0.5, False)
-		black_box_func.cache_clear()
-		df_marks = pd.DataFrame(temp_df_dct)
+		for func, problem_object in functions.items():
+			n_inter = otn * points
+			problem = problem_object.Problem(d)
+			X, y_s, temp_df_dct = bayes_optim(d, nu_mas, points, n_inter, x_range, 20, 0.5, False)
+			black_box_func.cache_clear()
+			df_marks = pd.DataFrame(temp_df_dct)
 
-		df_marks.to_csv(f'{func}_{d}d_test_data.csv', header=True, sep=';')
-		print('DataFrame is written successfully to csv.')
+			df_marks.to_csv(f'{func}_{d}d_test_data.csv', header=True, sep=';')
+			print('DataFrame is written successfully to csv.')
 
-		X, y_s, temp_df_dct = bayes_optim(d, nu_mas, points, n_inter, x_range, 20, 0.5, True)
-		black_box_func.cache_clear()
-		df_marks = pd.DataFrame(temp_df_dct)
+			X, y_s, temp_df_dct = bayes_optim(d, nu_mas, points, n_inter, x_range, 20, 0.5, True)
+			black_box_func.cache_clear()
+			df_marks = pd.DataFrame(temp_df_dct)
 
-		df_marks.to_csv(f'{func}_{d}d_test_data_s.csv', header=True, sep=';')
-		print('DataFrame is written successfully to csv.')
+			df_marks.to_csv(f'{func}_{d}d_test_data_s.csv', header=True, sep=';')
+			print('DataFrame is written successfully to csv.')
 
 
 if __name__ == '__main__':
