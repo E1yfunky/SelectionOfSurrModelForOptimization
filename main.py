@@ -1,108 +1,117 @@
-import openpyxl
-import random
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 
-from celluloid import Camera
-import mopt
-from functools import lru_cache
 from bayesian_optimization import Bayesian_Optimization
+from mopt import problems
+
+DATA_FOLDER = "data"
 
 
-@lru_cache(maxsize=None)
-def black_box_func(**X):
-	X = np.array([X[key] for key in sorted(X)], dtype=float)
+def bayes_optim(problem, n_init, n_iter, n_random_runs, nu_fixed, alpha):
+    df_dct = {
+        # Problem definition
+        'problem': [],
+        'dim': [],
+        'n_init': [],
+        'n_iter': [],
+        'nu_fixed': [],
+        'alpha': [],
+        # Current run info
+        'seed': [],
+        'iteration': [],
+        'suitability': [],
+        'score': [],
+        'metric': [],
+        'nu': [],
+        'x': [],
+        'f': [],
+        'f_model': [],
+        'time': [],
+    }
+    for i in range(n_random_runs):
+        print(f"[{i+1}/{n_random_runs}] {problem.NAME}")
+        init_sample = problems.Sample(problem, doe="lhs", size=n_init, seed=i, tag=f"seed={i}", verbose=True)
+        optimizer = Bayesian_Optimization(
+            problem=problem,
+            init_xf=(init_sample.x, init_sample.f),
+            nu_fixed=nu_fixed,
+            alpha=alpha,
+            random_state=i,
+        )
+        optimizer.maximize(init_points=0, n_iter=n_iter)
 
-	return -problem.define_objectives(X)[0]
+        # Problem definition
+        df_dct['problem'].extend([problem.NAME] * (n_init + n_iter))
+        df_dct['dim'].extend([problem.size_x] * (n_init + n_iter))
+        df_dct['n_init'].extend([n_init] * (n_init + n_iter))
+        df_dct['n_iter'].extend([n_iter] * (n_init + n_iter))
+        df_dct['nu_fixed'].extend([nu_fixed] * (n_init + n_iter))
+        df_dct['alpha'].extend([alpha] * (n_init + n_iter))
+        # Current run info
+        df_dct['seed'].extend([i] * (n_init + n_iter))
+        df_dct['iteration'].extend(list(range(1, n_init + n_iter + 1)))
+        df_dct['suitability'].extend(optimizer.history_suit)
+        df_dct['score'].extend(optimizer.history_score)
+        df_dct['metric'].extend(optimizer.history_metric)
+        df_dct['nu'].extend(optimizer.history_nu)
+        df_dct['x'].extend(optimizer.history_x)
+        df_dct['f'].extend(optimizer.history_f)
+        df_dct['f_model'].extend(optimizer.history_f_model)
+        df_dct['time'].extend(optimizer.history_time)
 
-
-def bayes_optim(d, nu_mas, init_points, n_iter, x_range, n, alfa, isMode):
-	result_data = []
-	df_dct = {
-			  'dimension': [d] * n_iter * n * len(nu_mas),
-			  'nu': [],
-			  'iteration': [i for i in range(n_iter)] * len(nu_mas) * n,
-			  'init_points': [init_points] * n_iter * len(nu_mas) * n,
-			  'iters:points': [n_iter / init_points] * n_iter * len(nu_mas) * n,
-			  'X': [],
-			  'target': [],
-			  'score': [],
-			  'suitability': [],
-			  'metric': [],
-			  'seed': [],
-			  'time': []}
-	for nu in nu_mas:
-		for i in range(n):
-			seed = i
-			if not isMode:
-				df_dct['nu'].extend([nu] * n_iter)
-
-			init_sample = mopt.problems.Sample(problem, doe="lhs", size=init_points, seed=seed, tag=f"seed={seed}",
-											   verbose=True)
-			optimizer = Bayesian_Optimization(f=black_box_func,
-											 pbounds={f"x[{_}]": x_range for _ in range(d)},
-											 verbose=2,
-											 random_state=seed,
-											 nu=nu,
-											 init_sample=init_sample.x,
-											 alfa=alfa,
-											 isMode=isMode)
-
-			optimizer.maximize(init_points=init_points, n_iter=n_iter)
-			if isMode:
-				df_dct['nu'].extend(optimizer._bst_nu)
-			df_dct['X'].extend(optimizer.test_x)
-			df_dct['target'].extend(optimizer._res)
-			df_dct['score'].extend(optimizer._score_res)
-			df_dct['metric'].extend(optimizer._metric)
-			df_dct['suitability'].extend(optimizer._suit)
-			df_dct['time'].extend(optimizer._time)
-			df_dct['seed'].extend([seed] * n_iter)
-			if len(result_data) > 0 and len(result_data[-1]) % n > 0:
-				result_data[-1].append(-optimizer.max["target"])
-			else:
-				result_data.append([-optimizer.max["target"]])
-			print(black_box_func.cache_info())
-			print("{}/{} Best result: {}; f(x) = {}.".format(i + 1, n, optimizer.max["params"], optimizer.max["target"]))
-
-	return nu_mas, np.array(result_data), df_dct
+        best_idx = np.argmin(optimizer.history_f)
+        print(
+            f"[{i+1}/{n_random_runs}] {problem.NAME} "
+            f"x*={optimizer.history_x[best_idx]}; "
+            f"f(x*)={optimizer.history_f[best_idx]}"
+        )
+    return pd.DataFrame(df_dct)
 
 
 def main():
-	black_box_func.cache_clear()
-	global problem
+    problems_list = [
+        problems.f1.ackley,
+        # problems.f1.bohachevsky,
+        # problems.f1.griewank,
+        problems.f1.levy3,
+        # problems.f1.michalewicz,
+        # problems.f1.perm,
+        problems.f1.rastrigin,
+        problems.f1.rosenbrock,
+        # problems.f1.salomon,
+        problems.f1.styblinskitang,
+        # problems.f1.trid,
+        # problems.f1.weierstrass,
+    ]
 
-	seed = 2
-	random.seed(seed)
-	functions = {'himmelblau': mopt.problems.f1.himmelblau, "ackley": mopt.problems.f1.ackley, 'levy': mopt.problems.f1.levy3}
+    nu_fixed = 2.5
+    n_runs = 30
 
-	x_range = [-3, 3]
-	min_nu = 0
-	max_nu = 3
-	otn = 3
-	# nu_mas = np.linspace(min_nu, max_nu, 13)
-	nu_mas = [2.5]
-	d_dct = {2: 12, 4: 80, 8: 160}  #2: 12, 4: 80, 8: 160
+    data_folder = Path(DATA_FOLDER)
+    data_folder.mkdir(parents=True, exist_ok=True)
 
-	for d, points in d_dct.items():
-		for func, problem_object in functions.items():
-			n_inter = otn * points
-			problem = problem_object.Problem(d)
-			X, y_s, temp_df_dct = bayes_optim(d, nu_mas, points, n_inter, x_range, 20, 0.5, False)
-			black_box_func.cache_clear()
-			df_marks = pd.DataFrame(temp_df_dct)
+    for dim, n_init in [(2, 16), (4, 64), (8, 128)]:
+        for problem_class in problems_list:
+            for alpha in [None, 0.01, 0.5, 0.99]:
+                n_iter = 2 * n_init
+                problem = problem_class.Problem(dim)
 
-			df_marks.to_csv(f'{func}_{d}d_test_data.csv', header=True, sep=';')
-			print('DataFrame is written successfully to csv.')
+                tag = f"{problem.NAME} dim={dim} n_init={n_init} n_iter={n_iter} alpha={alpha} nu_fixed={nu_fixed} n_runs={n_runs}"
+                data_file = data_folder / f"{tag}.csv"
+                print(tag)
+                if data_file.exists():
+                    continue
 
-			X, y_s, temp_df_dct = bayes_optim(d, nu_mas, points, n_inter, x_range, 20, 0.5, True)
-			black_box_func.cache_clear()
-			df_marks = pd.DataFrame(temp_df_dct)
-
-			df_marks.to_csv(f'{func}_{d}d_test_data_s.csv', header=True, sep=';')
-			print('DataFrame is written successfully to csv.')
+                data = bayes_optim(problem=problem,
+                                   n_init=n_init,
+                                   n_iter=n_iter,
+                                   n_random_runs=n_runs,
+                                   nu_fixed=nu_fixed,
+                                   alpha=alpha)
+                data.to_csv(data_file)
 
 
 if __name__ == '__main__':
-	main()
+    main()
