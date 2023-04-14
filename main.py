@@ -1,12 +1,29 @@
+import logging
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
-
+import datetime
 from bayesian_optimization import Bayesian_Optimization
 from mopt import problems
 
+
 DATA_FOLDER = "data"
+LOG_FOLDER = "logs"
+LOG_FILE = Path(LOG_FOLDER) / f"main {datetime.datetime.now():%Y.%m.%d.%H.%M}.log"
+
+Path(LOG_FOLDER).mkdir(parents=True, exist_ok=True)
+log_to_file = logging.FileHandler(str(LOG_FILE), mode='w')
+
+formatter = logging.Formatter('[%(asctime)s] <%(levelname)s> %(message)s')
+log_to_file.setFormatter(formatter)
+log_to_stdout = logging.StreamHandler()
+log_to_stdout.setFormatter(formatter)
+
+LOG = logging.getLogger()
+LOG.addHandler(log_to_file)
+LOG.addHandler(log_to_stdout)
+LOG.setLevel(logging.DEBUG)
 
 
 def bayes_optim(problem, n_init, n_iter, n_random_runs, nu_fixed, alpha):
@@ -31,7 +48,7 @@ def bayes_optim(problem, n_init, n_iter, n_random_runs, nu_fixed, alpha):
         'time': [],
     }
     for i in range(n_random_runs):
-        print(f"[{i+1}/{n_random_runs}] {problem.NAME}")
+        LOG.info(f"[{i+1}/{n_random_runs}] {problem.NAME}")
         init_sample = problems.Sample(problem, doe="lhs", size=n_init, seed=i, tag=f"seed={i}", verbose=True)
         optimizer = Bayesian_Optimization(
             problem=problem,
@@ -62,7 +79,7 @@ def bayes_optim(problem, n_init, n_iter, n_random_runs, nu_fixed, alpha):
         df_dct['time'].extend(optimizer.history_time)
 
         best_idx = np.argmin(optimizer.history_f)
-        print(
+        LOG.info(
             f"[{i+1}/{n_random_runs}] {problem.NAME} "
             f"x*={optimizer.history_x[best_idx]}; "
             f"f(x*)={optimizer.history_f[best_idx]}"
@@ -92,7 +109,9 @@ def main():
     data_folder = Path(DATA_FOLDER)
     data_folder.mkdir(parents=True, exist_ok=True)
 
-    for dim, n_init in [(2, 16), (4, 64), (8, 128)]:
+    for dim, n_init, n_runs in [(2, 16, 30),
+                                (4, 32, 20),
+                                (8, 96, 10)]:
         for problem_class in problems_list:
             for alpha in [None, 0.01, 0.5, 0.99]:
                 n_iter = 2 * n_init
@@ -100,7 +119,7 @@ def main():
 
                 tag = f"{problem.NAME} dim={dim} n_init={n_init} n_iter={n_iter} alpha={alpha} nu_fixed={nu_fixed} n_runs={n_runs}"
                 data_file = data_folder / f"{tag}.csv"
-                print(tag)
+                LOG.info(f"{tag}")
                 if data_file.exists():
                     continue
 
