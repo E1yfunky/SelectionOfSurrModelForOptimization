@@ -177,7 +177,7 @@ class Bayesian_Optimization(BayesianOptimization):
         self.history_f = [_[0] for _ in self.init_f]
         self.history_f_model = [np.nan] * n_init
         self.history_time = [0] * n_init
-        self.dist_matrix, self.nearest_points, self.interpolated_points, self.interpolated_values = init_function(self.init_x, self.init_f.reshape(16,), 5 - 2)
+        self.dist_matrix, self.nearest_points, self.interpolated_points, self.interpolated_values = init_function(self.init_x, self.init_f.reshape(self.init_f.shape[0],), 5 - 2)
 
     def suggest(self, utility_function):
         # Sklearn's GP throws a large number of warnings at times, but
