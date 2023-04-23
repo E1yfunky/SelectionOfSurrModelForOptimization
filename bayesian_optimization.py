@@ -1,4 +1,3 @@
-import enum
 import time
 import warnings
 
@@ -161,8 +160,10 @@ class Bayesian_Optimization(BayesianOptimization):
             **kwargs,
         )
 
-        for x, f in zip(self.init_x, self.init_f):
-            self.register(x, -f[0])
+        for x in self.init_x:
+            # Do not register f values so that the
+            # initial sample is printed to log
+            self.probe(x)
 
         # Reinitialize internal GP regressor with default nu value
         self.set_gp_params(kernel=Matern(nu=nu_fixed))
