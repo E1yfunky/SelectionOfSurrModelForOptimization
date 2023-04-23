@@ -37,7 +37,6 @@ def add_point(dist_matrix, n, points, target_values, nearest_points, interpolate
     for i in range(num_points - m, num_points):
         nearest_points = find_nearest(i, dist_matrix, nearest_points)
 
-        # Шаг 3: Интерполировать между парами точек и сохранить результат
         interpolation_vectors, interpolation_values = interpol_for_point(i, n, nearest_points, points, target_values)
 
         interpolated_points = np.append(interpolated_points, interpolation_vectors, axis=0)
@@ -57,26 +56,10 @@ def find_nearest(i, dist_matrix, nearest_points):
 
 
 def euclidean_distance(point_a, point_b):
-    """
-    Вычисляет евклидово расстояние между двумя точками point_a и point_b.
-
-    :param point_a: np.array, первая точка
-    :param point_b: np.array, вторая точка
-    :return: float, евклидово расстояние между точками
-    """
     return np.sqrt(np.sum((point_a - point_b) ** 2))
 
 
 def linear_interpolation(point_a, point_b, target_a, target_b, new_points):
-    """
-    Выполняет линейную интерполяцию между двумя многомерными точками point_a и point_b,
-    используя расстояния между точками для вычисления параметра t.
-
-    :param point_a: np.array, начальная точка
-    :param point_b: np.array, конечная точка
-    :param new_point: np.array, новая точка для интерполяции
-    :return: np.array, интерполированная точка
-    """
     interpolation_values = np.zeros(new_points.shape[0])
     if len(point_a) != len(point_b):
         raise ValueError("Размерности точек должны совпадать")
@@ -107,22 +90,18 @@ def init_function(points, target_values, n):
     num_points = points.shape[0]
     dist_matrix = np.zeros((num_points, num_points))
 
-    # Шаг 1: Вычислить расстояния между точками и сохранить их в матрице расстояний
     for i in range(num_points):
         dist_matrix = point_dist(i, dist_matrix, points, target_values)
 
 
     nearest_points = [-1] * num_points
-    # interpolated_points = interpolated_values = np.array([])
 
     nearest_points = find_nearest(0, dist_matrix, nearest_points)
     interpolated_points, interpolated_values = interpol_for_point(0, n, nearest_points, points, target_values)
 
-    # Шаг 2: Найти ближайшую точку для каждой точки (или вторую по близости, если это необходимо)
     for i in range(1, num_points):
         nearest_points = find_nearest(i, dist_matrix, nearest_points)
 
-        # Шаг 3: Интерполировать между парами точек и сохранить результат
         interpolation_vectors, interpolation_values = interpol_for_point(i, n, nearest_points, points, target_values)
 
         interpolated_points = np.append(interpolated_points, interpolation_vectors, axis=0)
