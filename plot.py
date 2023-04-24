@@ -28,21 +28,22 @@ selection_results["nu"] = selection_results["nu"].replace(np.inf, 6)
 selection_results["suitability"].std()
 selection_results["score"].std()
 
-plt.plot(selection_results["score"], selection_results["suitability"], 'o')
-plt.grid()
-plt.xlabel("score")
-plt.ylabel("suitability")
-plt.savefig(plots_path / "ALL score_vs_suitability.png")
-plt.show()
-plt.close()
+for n_ext, data in selection_results.groupby("n_ext"):
+    plt.plot(data["score"], data["suitability"], 'o')
+    plt.grid()
+    plt.xlabel("score")
+    plt.ylabel("suitability")
+    plt.savefig(plots_path / f"ALL score_vs_suitability n_ext={n_ext}.png")
+    plt.show()
+    plt.close()
 
-plt.hist(selection_results["nu"])
-plt.grid()
-plt.xlabel("score")
-plt.ylabel("suitability")
-plt.savefig(plots_path / f"ALL selected nu.png")
-plt.show()
-plt.close()
+    plt.hist(data["nu"])
+    plt.grid()
+    plt.xlabel("score")
+    plt.ylabel("suitability")
+    plt.savefig(plots_path / f"ALL selected_nu n_ext={n_ext}.png")
+    plt.show()
+    plt.close()
 
 # %%
 run_results = {
@@ -51,40 +52,45 @@ run_results = {
   "seed": [],
   "alpha": [],
   "nu_fixed": [],
+  "n_ext": [],
   "f_best": [],
   "f_best_norm": [],
   "time": [],
 }
-for keys, data in all_data.groupby(["problem", "dim", "seed", "alpha", "nu_fixed"], dropna=False):
-    problem, dim, seed, alpha, nu_fixed = keys
+for keys, data in all_data.groupby(["problem", "dim", "seed", "alpha", "nu_fixed", "n_ext"], dropna=False):
+    problem, dim, seed, alpha, nu_fixed, n_ext = keys
     f_min_known = data["f_min"].min()
     run_results["problem"].append(problem)
     run_results["dim"].append(dim)
     run_results["seed"].append(seed)
     run_results["alpha"].append(alpha)
     run_results["nu_fixed"].append(nu_fixed)
+    run_results["n_ext"].append(n_ext)
     run_results["f_best"].append(data["f"].min())
     run_results["f_best_norm"].append((data["f"].min() - f_min_known) / max(1, np.abs(f_min_known)))
     run_results["time"].append(data["time"].sum())
 run_results = pd.DataFrame(run_results)
 
 # %%
-for (problem, dim), data in run_results.groupby(["problem", "dim"]):
+for (problem, dim, n_ext), data in run_results.groupby(["problem", "dim", "n_ext"]):
     ax = data.boxplot(by='alpha', column='f_best')
-    title = f"{problem} {dim}"
-    ax.set_title(f"{problem} {dim}")
+    title = f"{problem} D{dim} n_ext={n_ext}"
+    ax.set_title(title)
     ax.set_ylabel("f_best")
     plt.savefig(plots_path / f"PROBLEM {title}.png")
     plt.show()
     plt.close()
 
 # %%
-values = np.unique(run_results["f_best_norm"])
-for alpha, data in run_results.groupby("alpha"):
-    ratios = [sum(data["f_best_norm"] < value) for value in values]
-    plt.plot(values, ratios, label=alpha)
-plt.grid()
-plt.legend()
-plt.savefig(plots_path / "ALL performance_plots.png")
-plt.show()
-plt.close()
+for n_ext, data_n_ext in run_results.groupby("n_ext"):
+  values = np.unique(data_n_ext["f_best_norm"])
+  for alpha, data_alpha in data_n_ext.groupby("alpha"):
+      ratios = [sum(data_alpha["f_best_norm"] < value) for value in values]
+      plt.plot(values, ratios, label=f"alpha={alpha}")
+  plt.grid()
+  plt.legend()
+  plt.xlabel("f_best_norm")
+  plt.ylabel("n runs with better value")
+  plt.savefig(plots_path / f"ALL performance_plots n_ext={n_ext}.png")
+  plt.show()
+  plt.close()
