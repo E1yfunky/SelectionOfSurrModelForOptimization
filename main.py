@@ -1,24 +1,23 @@
+import datetime
 import logging
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import datetime
+
 from bayesian_optimization import Bayesian_Optimization
 from mopt import problems
 
-
 DATA_FOLDER = "data"
 LOG_FOLDER = "logs"
-LOG_FILE = Path(LOG_FOLDER) / f"main {datetime.datetime.now():%Y.%m.%d.%H.%M}.log"
 
 Path(LOG_FOLDER).mkdir(parents=True, exist_ok=True)
-log_to_file = logging.FileHandler(str(LOG_FILE), mode='w')
-
+log_path = Path(LOG_FOLDER) / f"main {datetime.datetime.now():%Y.%m.%d %H.%M}.log"
 formatter = logging.Formatter('[%(asctime)s] <%(levelname)s> %(message)s')
-log_to_file.setFormatter(formatter)
 log_to_stdout = logging.StreamHandler()
 log_to_stdout.setFormatter(formatter)
+log_to_file = logging.FileHandler(str(log_path), mode='w')
+log_to_file.setFormatter(formatter)
 
 LOG = logging.getLogger()
 LOG.addHandler(log_to_file)
@@ -26,13 +25,14 @@ LOG.addHandler(log_to_stdout)
 LOG.setLevel(logging.DEBUG)
 
 
-def bayes_optim(problem, n_init, n_iter, n_random_runs, nu_fixed, alpha):
+def bayes_optim(problem, n_init, n_iter, n_ext, n_random_runs, nu_fixed, alpha):
     df_dct = {
         # Problem definition
         'problem': [],
         'dim': [],
         'n_init': [],
         'n_iter': [],
+        'n_ext': [],
         'nu_fixed': [],
         'alpha': [],
         # Current run info
@@ -55,6 +55,7 @@ def bayes_optim(problem, n_init, n_iter, n_random_runs, nu_fixed, alpha):
             init_xf=(init_sample.x, init_sample.f),
             nu_fixed=nu_fixed,
             alpha=alpha,
+            n_ext=n_ext,
             random_state=i,
         )
         optimizer.maximize(init_points=0, n_iter=n_iter)
@@ -64,6 +65,7 @@ def bayes_optim(problem, n_init, n_iter, n_random_runs, nu_fixed, alpha):
         df_dct['dim'].extend([problem.size_x] * (n_init + n_iter))
         df_dct['n_init'].extend([n_init] * (n_init + n_iter))
         df_dct['n_iter'].extend([n_iter] * (n_init + n_iter))
+        df_dct['n_ext'].extend([n_ext] * (n_init + n_iter))
         df_dct['nu_fixed'].extend([nu_fixed] * (n_init + n_iter))
         df_dct['alpha'].extend([alpha] * (n_init + n_iter))
         # Current run info
@@ -104,7 +106,7 @@ def main():
     ]
 
     nu_fixed = 2.5
-    n_runs = 30
+    n_ext = 0
 
     data_folder = Path(DATA_FOLDER)
     data_folder.mkdir(parents=True, exist_ok=True)
@@ -117,7 +119,7 @@ def main():
                 n_iter = 2 * n_init
                 problem = problem_class.Problem(dim)
 
-                tag = f"{problem.NAME} dim={dim} n_init={n_init} n_iter={n_iter} alpha={alpha} nu_fixed={nu_fixed} n_runs={n_runs}"
+                tag = f"{problem.NAME} dim={dim} n_init={n_init} n_iter={n_iter} alpha={alpha} nu_fixed={nu_fixed} n_runs={n_runs} n_ext={n_ext}"
                 data_file = data_folder / f"{tag}.csv"
                 LOG.info(f"{tag}")
                 if data_file.exists():
@@ -126,6 +128,7 @@ def main():
                 data = bayes_optim(problem=problem,
                                    n_init=n_init,
                                    n_iter=n_iter,
+                                   n_ext=n_ext,
                                    n_random_runs=n_runs,
                                    nu_fixed=nu_fixed,
                                    alpha=alpha)
