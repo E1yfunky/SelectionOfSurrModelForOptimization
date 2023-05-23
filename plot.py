@@ -4,12 +4,17 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-DATA_FOLDER = "data"
+DATA_FOLDER = "data1"
 PLOTS_FOLDER = "plots"
 NONE_LABEL = "NONE"
 
 plots_path = Path(PLOTS_FOLDER)
 plots_path.mkdir(parents=True, exist_ok=True)
+
+plt.rcParams["font.family"] = "serif"
+plt.rcParams["font.serif"] = "Times New Roman"
+plt.rcParams['font.size'] = '22'
+plt.figure(figsize=(10, 8))
 
 data_list = []
 for file in Path(DATA_FOLDER).iterdir():
@@ -29,22 +34,22 @@ selection_results["suitability"].std()
 selection_results["score"].std()
 
 for n_ext, data in selection_results.groupby("n_ext"):
-    plt.plot(data["score"], data["suitability"], 'o')
+    plt.plot(data["score"], data["suitability"], 'o', alpha=0.13)
     plt.grid()
-    plt.xlabel("score")
-    plt.ylabel("suitability")
-    plt.savefig(plots_path / f"ALL score_vs_suitability n_ext={n_ext}.png")
+    plt.xlabel("Sc", style='italic')
+    plt.ylabel("Su", style='italic')
+    plt.savefig(plots_path / f"ALL score_vs_suitability n_ext={n_ext}.png", bbox_inches='tight')
     plt.show()
     plt.close()
 
+    plt.figure(figsize=(10, 8))
     plt.hist(data["nu"])
     plt.grid()
-    plt.xlabel("score")
-    plt.ylabel("suitability")
-    plt.savefig(plots_path / f"ALL selected_nu n_ext={n_ext}.png")
+    plt.xlabel('$\\nu$', style='italic')
+    plt.ylabel('N', style='italic')
+    plt.savefig(plots_path / f"ALL selected_nu n_ext={n_ext}.png", bbox_inches='tight')
     plt.show()
     plt.close()
-
 # %%
 run_results = {
   "problem": [],
@@ -75,22 +80,24 @@ run_results = pd.DataFrame(run_results)
 for (problem, dim, n_ext), data in run_results.groupby(["problem", "dim", "n_ext"]):
     ax = data.boxplot(by='alpha', column='f_best')
     title = f"{problem} D{dim} n_ext={n_ext}"
-    ax.set_title(title)
-    ax.set_ylabel("f_best")
-    plt.savefig(plots_path / f"PROBLEM {title}.png")
+    ax.set_title('')
+    ax.set_ylabel('$\widetilde{f}^*$')
+    ax.set_xlabel('$\\alpha$')
+    plt.savefig(plots_path / f"PROBLEM {title}.png", bbox_inches='tight')
     plt.show()
     plt.close()
 
 # %%
 for n_ext, data_n_ext in run_results.groupby("n_ext"):
   values = np.unique(data_n_ext["f_best_norm"])
+  plt.figure(figsize=(7, 7))
   for alpha, data_alpha in data_n_ext.groupby("alpha"):
       ratios = [sum(data_alpha["f_best_norm"] < value) for value in values]
-      plt.plot(values, ratios, label=f"alpha={alpha}")
+      plt.plot(values, ratios, label=f"$\\alpha$ = {alpha}")
   plt.grid()
   plt.legend()
-  plt.xlabel("f_best_norm")
-  plt.ylabel("n runs with better value")
+  plt.xlabel("$||\widetilde{f}^*||$")
+  plt.ylabel("N", style='italic')
   plt.savefig(plots_path / f"ALL performance_plots n_ext={n_ext}.png")
   plt.show()
   plt.close()
